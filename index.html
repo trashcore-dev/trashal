@@ -17,6 +17,7 @@
       --menu-bg: rgba(30, 41, 59, 0.95);
       --timestamp: rgba(255, 255, 255, 0.4);
       --footer-bg: rgba(15, 23, 42, 0.7);
+      --recording-color: #ef4444;
     }
     
     * {
@@ -361,6 +362,37 @@
       color: #94a3b8;
     }
     
+    .voice-btn {
+      background: none;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+    }
+    
+    .voice-btn:hover {
+      color: var(--accent);
+      background: rgba(56, 189, 248, 0.15);
+    }
+    
+    .voice-btn.recording {
+      color: var(--recording-color);
+      animation: pulse 1.5s infinite;
+    }
+    
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+      70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+    
     button.send-btn {
       background: linear-gradient(135deg, var(--accent-dark), var(--accent));
       border: 0;
@@ -537,9 +569,18 @@
         bottom: 55px; /* Adjusted for mobile */
       }
       
+      .input-box {
+        gap: 8px;
+      }
+      
       input#user-input {
         font-size: 15px;
         padding: 10px 14px;
+      }
+      
+      .voice-btn {
+        width: 32px;
+        height: 32px;
       }
       
       button.send-btn {
@@ -608,9 +649,18 @@
         bottom: 60px; /* Adjusted for very small screens */
       }
       
+      .input-box {
+        gap: 6px;
+      }
+      
       input#user-input {
         font-size: 14px;
         padding: 8px 12px;
+      }
+      
+      .voice-btn {
+        width: 30px;
+        height: 30px;
       }
       
       button.send-btn {
@@ -656,16 +706,16 @@
       
       <div class="model-menu" id="model-menu">
         <div class="model-option active" data-model="copilot">
-          <span>🤖</span> Drexter 5.1 AI
+          <span>🤖</span> Copilot AI
         </div>
         <div class="model-option" data-model="qwen">
-          <span>⚙️</span> Drexter 1.3 AI
+          <span>⚙️</span> Qwen Coder AI
         </div>
         <div class="model-option" data-model="llama">
-          <span>🦙</span> Drexter 4.6 AI
+          <span>🦙</span> LLaMA 3.3 AI
         </div>
         <div class="model-option" data-model="gpt">
-          <span>🔮</span> Drexter 120B
+          <span>🔮</span> GPT-OSS 120B
         </div>
       </div>
     </div>
@@ -676,6 +726,13 @@
 
     <div class="input-area" aria-label="Chat input">
       <div class="input-box">
+        <button class="voice-btn" id="voice-btn" title="Record voice message">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 16C14.2091 16 16 14.2091 16 12V6C16 3.79086 14.2091 2 12 2C9.79086 2 8 3.79086 8 6V12C8 14.2091 9.79086 16 12 16Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M4 10V12C4 16.4183 7.58172 20 12 20C16.4183 20 20 16.4183 20 12V10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12 20V22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
         <input id="user-input" type="text" placeholder="Type your message..." aria-label="Message input" />
         <button id="send-btn" class="send-btn" title="Send">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -705,10 +762,14 @@
     const chatBox = document.getElementById('chat-box');
     const userInput = document.getElementById('user-input');
     const sendBtn = document.getElementById('send-btn');
+    const voiceBtn = document.getElementById('voice-btn');
     
     // State
     let currentModel = 'copilot';
     let chatHistory = [];
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let isRecording = false;
 
     // Initialize active model
     function setActiveModel(model) {
@@ -918,6 +979,105 @@
       });
     });
 
+    // Voice recording functionality
+    async function initVoiceRecording() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        
+        mediaRecorder.ondataavailable = event => {
+          audioChunks.push(event.data);
+        };
+        
+        mediaRecorder.onstop = () => {
+          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          const audioUrl = URL.createObjectURL(audioBlob);
+          
+          // Add voice message to chat
+          addMessage('user', `[Voice message: ${formatTime(new Date())}]`);
+          
+          // Send audio to server (for demo, we'll just send a placeholder)
+          // In a real app, you would send the audioBlob to your backend
+          sendVoiceMessage(audioUrl);
+          
+          // Reset recording state
+          audioChunks = [];
+          isRecording = false;
+          voiceBtn.classList.remove('recording');
+          voiceBtn.title = 'Record voice message';
+          
+          // Stop all tracks to release microphone
+          stream.getTracks().forEach(track => track.stop());
+        };
+      } catch (error) {
+        console.error('Error accessing microphone:', error);
+        alert('Microphone access denied. Please allow microphone access to record voice messages.');
+      }
+    }
+    
+    function startRecording() {
+      if (!mediaRecorder) {
+        initVoiceRecording();
+        return;
+      }
+      
+      audioChunks = [];
+      mediaRecorder.start();
+      isRecording = true;
+      voiceBtn.classList.add('recording');
+      voiceBtn.title = 'Stop recording';
+    }
+    
+    function stopRecording() {
+      if (mediaRecorder && isRecording) {
+        mediaRecorder.stop();
+      }
+    }
+    
+    // Send voice message to server
+    function sendVoiceMessage(audioUrl) {
+      // In a real implementation, you would:
+      // 1. Convert the audio blob to text using speech recognition
+      // 2. Send the text to your backend API
+      // For demo, we'll simulate a text conversion
+      
+      // Simulate voice-to-text conversion
+      const simulatedText = "This is a simulated voice message. In a real implementation, this would be converted from your speech.";
+      
+      // Send to your Vercel API route
+      fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          text: simulatedText, 
+          model: currentModel 
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.reply) {
+          addMessage('bot', data.reply);
+        } else {
+          addMessage('bot', '❌ Error: Could not process voice message');
+        }
+      })
+      .catch(err => {
+        console.error('Voice message error:', err);
+        addMessage('bot', '❌ Error: Failed to send voice message');
+      });
+    }
+    
+    // Voice button click handler
+    voiceBtn.addEventListener('click', () => {
+      if (isRecording) {
+        stopRecording();
+      } else {
+        startRecording();
+      }
+    });
+    
     // Updated sendMessage function to use /api/chat
     async function sendMessage(){
       const text = userInput.value.trim();
